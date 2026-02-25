@@ -1,0 +1,32 @@
+{
+  "name": "redbook",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "start:lite": "next start -p 3000",
+    "clean": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue; Remove-Item -Force .redbook-dev.log -ErrorAction SilentlyContinue\"",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "next": "16.1.6",
+    "node-fetch": "^3.3.2",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9.14.0",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "minimatch": "^10.2.1"
+  }
+}
