@@ -4,6 +4,33 @@ import { fetchXhsBrowserData } from '@/lib/xhs-browser'
 
 export const runtime = 'edge'
 
+
+
+function parseFeishuTableUrl(url: string) {
+  // Pattern 1: https://bytedance.larkoffice.com/sheets/{appToken}?sheet={tableId}
+  const sheetsRegex = /https:\/\/[^\/]+\/sheets\/([^?]+)\?sheet=([^&]+)/
+  const sheetsMatch = url.match(sheetsRegex)
+  if (sheetsMatch) {
+    return {
+      appToken: sheetsMatch[1],
+      tableId: sheetsMatch[2]
+    }
+  }
+  
+  // Pattern 2: https://my.feishu.cn/base/{appToken}?table={table_id}&view={view_id}
+  const baseRegex = /https:\/\/[^\/]+\/base\/([^?]+)\?table=([^&]+)/
+  const baseMatch = url.match(baseRegex)
+  if (baseMatch) {
+    // For base-style URLs, we can extract both appToken and tableId from the URL
+    return {
+      appToken: baseMatch[1],
+      tableId: baseMatch[2]
+    }
+  }
+  
+  return null
+}
+
 function deriveCategoryFromTitle(title: string) {
   const bracketMatch = title.match(/[【\[]([^】\]]+)[】\]]/)
   if (bracketMatch?.[1]) {
@@ -29,13 +56,16 @@ export async function POST(request: Request) {
       )
     }
 
-    const { xhsUrl, title, author, productType, images } = body as { 
-      xhsUrl?: string, 
-      title?: string, 
-      author?: string, 
-      productType?: string, 
-      images?: string[] 
-    }
+    const { xhsUrl, title, author, productType, images, feishuTableUrl, appToken: directAppToken, tableId: directTableId } = body as { 
+    xhsUrl?: string, 
+    title?: string, 
+    author?: string, 
+    productType?: string, 
+    images?: string[],
+    feishuTableUrl?: string,
+    appToken?: string,
+    tableId?: string
+  }
     
     console.log('小红书链接:', xhsUrl)
 
@@ -112,8 +142,37 @@ export async function POST(request: Request) {
 
     console.log('准备上传到飞书的数据:', uploadData)
 
+    let appToken: string | undefined
+    let tableId: string | undefined
+    
+    // First priority: use directly provided appToken and tableId
+    if (directAppToken && directTableId) {
+      console.log('使用直接提供的 appToken 和 tableId')
+      appToken = directAppToken
+      tableId = directTableId
+    } 
+    // Second priority: process URL
+    else if (feishuTableUrl) {
+      console.log('解析飞书表格URL:', feishuTableUrl)
+      
+      // 检查是否为 wiki 链接
+      if (feishuTableUrl.includes('wiki')) {
+        throw new Error('暂不支持 Wiki 表格，请更换为飞书多维表格或 Sheets 链接')
+      }
+      
+      const parsed = parseFeishuTableUrl(feishuTableUrl)
+      if (parsed) {
+        // For URL types, use directly extracted values
+        appToken = parsed.appToken
+        tableId = parsed.tableId
+        console.log('解析结果:', { appToken, tableId })
+      } else {
+        console.warn('飞书表格URL解析失败，将使用环境变量配置')
+      }
+    }
+
     console.log('开始上传到飞书...')
-    await addToFeishuBitable(uploadData, token)
+    await addToFeishuBitable(uploadData, token, appToken, tableId)
 
     console.log('上传成功！')
     return NextResponse.json({

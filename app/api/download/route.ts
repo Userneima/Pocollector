@@ -56,10 +56,10 @@ export async function POST(request: Request) {
     
     console.log('开始下载图片，数量:', imageUrls.length)
     
-    let verifiedImages = []
-    let failedImages = []
-    let verifiedUrls = []
-    let failedUrls = []
+    let verifiedImages: Array<{ url: string; type: string; size: number; filename: string }> = []
+    let failedImages: Array<{ url: string; error: string }> = []
+    let verifiedUrls: string[] = []
+    let failedUrls: Array<{ url: string; error: string }> = []
     
     if (imageUrls.length > 0) {
       // 使用新的图片验证功能

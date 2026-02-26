@@ -264,10 +264,14 @@ export async function getTenantAccessToken(): Promise<string> {
 
 export async function addToFeishuBitable(
   input: AddToFeishuBitableInput,
-  token?: string
+  token?: string,
+  appToken?: string,
+  tableId?: string
 ) {
   const accessToken = token ?? (await getTenantAccessToken())
-  const { appToken, tableId } = readBitableEnv()
+  const envConfig = readBitableEnv()
+  const finalAppToken = appToken ?? envConfig.appToken
+  const finalTableId = tableId ?? envConfig.tableId
   
   let productImageAttachments: FeishuAttachment[] = []
   
@@ -280,7 +284,7 @@ export async function addToFeishuBitable(
         const attachments = await uploadImageFromUrl(
           imageUrl,
           accessToken,
-          appToken
+          finalAppToken
         )
         productImageAttachments = [...productImageAttachments, ...attachments]
       }
@@ -325,7 +329,7 @@ export async function addToFeishuBitable(
 
   let response: Response
   try {
-    response = await fetchWithTimeout(buildBitableRecordUrl(appToken, tableId), {
+    response = await fetchWithTimeout(buildBitableRecordUrl(finalAppToken, finalTableId), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

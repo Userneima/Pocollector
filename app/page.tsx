@@ -83,6 +83,9 @@ type StatusState =
 type HistoryItem = { url: string; time: number; title?: string }
 const HISTORY_KEY = 'xhs-history'
 
+type FeishuTableHistoryItem = { url: string; time: number; name?: string }
+const FEISHU_TABLE_HISTORY_KEY = 'feishu-table-history'
+
 type PreviewData = {
   title: string
   author: string
@@ -151,6 +154,12 @@ export default function Home() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editableData, setEditableData] = useState<EditableData | null>(null)
   const [useDeepSeek, setUseDeepSeek] = useState(true)
+  const [feishuTableUrl, setFeishuTableUrl] = useState('')
+  const [showDirectInput, setShowDirectInput] = useState(false)
+  const [appToken, setAppToken] = useState('')
+  const [tableId, setTableId] = useState('')
+  const [feishuTableHistory, setFeishuTableHistory] = useState<FeishuTableHistoryItem[]>([])
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false)
 
   useEffect(() => {
     const savedHistory = localStorage.getItem(HISTORY_KEY)
@@ -159,6 +168,22 @@ export default function Home() {
         setHistory(JSON.parse(savedHistory))
       } catch {
         localStorage.removeItem(HISTORY_KEY)
+      }
+    }
+    
+    // 从本地存储读取保存的飞书表格URL
+    const savedFeishuTableUrl = localStorage.getItem('feishuTableUrl')
+    if (savedFeishuTableUrl) {
+      setFeishuTableUrl(savedFeishuTableUrl)
+    }
+    
+    // 从本地存储读取飞书表格历史
+    const savedFeishuTableHistory = localStorage.getItem(FEISHU_TABLE_HISTORY_KEY)
+    if (savedFeishuTableHistory) {
+      try {
+        setFeishuTableHistory(JSON.parse(savedFeishuTableHistory))
+      } catch {
+        localStorage.removeItem(FEISHU_TABLE_HISTORY_KEY)
       }
     }
   }, [])
@@ -174,9 +199,29 @@ export default function Home() {
     setHistory(newHistory)
     localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
   }
+  
+  function pushFeishuTableHistory(url: string) {
+    // Extract table name from URL (simplified - could be improved)
+    const name = url.split('/').pop()?.split('?')[0] || '飞书表格'
+    
+    const newEntry: FeishuTableHistoryItem = {
+      url,
+      time: Date.now(),
+      name,
+    }
+
+    const newHistory = [newEntry, ...feishuTableHistory.filter((item) => item.url !== url)].slice(0, 5)
+    setFeishuTableHistory(newHistory)
+    localStorage.setItem(FEISHU_TABLE_HISTORY_KEY, JSON.stringify(newHistory))
+  }
 
   const handleReuse = (url: string) => {
     setXhsUrl(url)
+    setStatus({ type: 'idle', message: '' })
+  }
+  
+  const handleReuseFeishuTable = (url: string) => {
+    setFeishuTableUrl(url)
     setStatus({ type: 'idle', message: '' })
   }
 
@@ -187,6 +232,18 @@ export default function Home() {
       pushHistory(trimmedUrl)
     }
   }, [xhsUrl])
+  
+  // 当飞书表格URL变化时，添加到历史记录
+  useEffect(() => {
+    localStorage.setItem('feishuTableUrl', feishuTableUrl)
+    
+    // 当飞书表格URL变化时，添加到历史记录
+    const trimmedUrl = feishuTableUrl.trim()
+    if (trimmedUrl && (trimmedUrl.includes('larkoffice.com') || trimmedUrl.includes('feishu.cn')) && 
+        (trimmedUrl.includes('sheets') || trimmedUrl.includes('wiki') || trimmedUrl.includes('base'))) {
+      pushFeishuTableHistory(trimmedUrl)
+    }
+  }, [feishuTableUrl])
 
   const isLoading = status.type === 'loading'
 
@@ -220,7 +277,7 @@ export default function Home() {
 
       // 处理图片数据：如果是对象数组，提取url属性
       const imageUrls = Array.isArray(data.data.images) 
-        ? data.data.images.map(img => typeof img === 'object' && img.url ? img.url : img)
+        ? data.data.images.map((img: { url?: string } | string) => typeof img === 'object' && img.url ? img.url : img)
         : []
       
       // 设置预览数据并打开编辑模态框
@@ -274,7 +331,12 @@ export default function Home() {
       const response = await fetch('/api/collect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ xhsUrl: xhsUrl.trim() }),
+        body: JSON.stringify({ 
+          xhsUrl: xhsUrl.trim(), 
+          feishuTableUrl: feishuTableUrl.trim(),
+          appToken: appToken.trim(),
+          tableId: tableId.trim()
+        }),
       })
 
       const data = (await response.json()) as {
@@ -299,6 +361,7 @@ export default function Home() {
 
       setTimeout(() => {
         setXhsUrl('')
+        setFeishuTableUrl('')
         setStatus({ type: 'idle', message: '' })
       }, 1200)
     } catch (error) {
@@ -340,6 +403,123 @@ export default function Home() {
                   placeholder="https://www.xiaohongshu.com/explore/..."
                   className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                 />
+              </div>
+              
+              <div>
+                <label
+                  htmlFor="feishu-table-url"
+                  className="mb-2 block text-sm font-medium text-zinc-700"
+                >
+                  飞书表格链接（可选）
+                </label>
+                <input
+                  id="feishu-table-url"
+                  type="url"
+                  value={feishuTableUrl}
+                  onChange={(e) => setFeishuTableUrl(e.target.value)}
+                  disabled={isLoading}
+                  placeholder="https://my.feishu.cn/wiki/... 或 https://my.feishu.cn/base/... 或 https://bytedance.larkoffice.com/sheets/..."
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                
+                {/* Wiki 链接提示 */}
+                {feishuTableUrl.includes('wiki') && (
+                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600 font-medium">
+                      暂不支持 Wiki 表格，请更换为飞书多维表格或 Sheets 链接
+                    </p>
+                    <p className="mt-1 text-xs text-red-500">
+                      推荐格式：https://my.feishu.cn/base/... 或 https://bytedance.larkoffice.com/sheets/...
+                    </p>
+                  </div>
+                )}
+                
+                {/* 直接输入 App Token 和 Table ID（可选） */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <label
+                      className="block text-sm font-medium text-zinc-700"
+                    >
+                      直接输入表格信息（可选）
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowDirectInput(!showDirectInput)}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      {showDirectInput ? '收起' : '展开'}
+                    </button>
+                  </div>
+                  
+                  {showDirectInput && (
+                    <div className="space-y-3">
+                      <div>
+                        <label
+                          htmlFor="app-token"
+                          className="mb-2 block text-sm font-medium text-zinc-700"
+                        >
+                          App Token
+                        </label>
+                        <input
+                          id="app-token"
+                          type="text"
+                          value={appToken}
+                          onChange={(e) => setAppToken(e.target.value)}
+                          disabled={isLoading}
+                          placeholder="例如：BGQabkuYvaxWehsUre4cXU00nNc"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label
+                          htmlFor="table-id"
+                          className="mb-2 block text-sm font-medium text-zinc-700"
+                        >
+                          Table ID
+                        </label>
+                        <input
+                          id="table-id"
+                          type="text"
+                          value={tableId}
+                          onChange={(e) => setTableId(e.target.value)}
+                          disabled={isLoading}
+                          placeholder="例如：tblBqu6yqyssf6b3"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                      </div>
+                      
+                      <p className="mt-1 text-xs text-zinc-500">
+                        提示：如果您已经知道正确的 App Token 和 Table ID，可以直接输入，系统会优先使用这些值
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* 飞书表格历史记录 */}
+                {feishuTableHistory.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs text-zinc-500">最近使用的表格：</p>
+                    <div className="flex flex-wrap gap-1">
+                      {feishuTableHistory.map((item) => (
+                        <button
+                          key={item.time}
+                          onClick={() => handleReuseFeishuTable(item.url)}
+                          className="inline-flex items-center px-2 py-1 text-xs bg-zinc-100 hover:bg-zinc-200 rounded-md transition"
+                        >
+                          <a 
+                            href={item.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {item.name}
+                          </a>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center">
@@ -478,26 +658,37 @@ export default function Home() {
             </div>
 
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-zinc-900">版本迭代</h2>
-              <p className="text-xs text-zinc-500">最新改动记录。</p>
-              <div className="space-y-3 text-sm">
-                {CHANGELOG.map((entry) => (
-                  <div
-                    key={entry.version}
-                    className="rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between text-xs text-zinc-500">
-                      <span className="font-semibold text-zinc-800">{entry.version}</span>
-                      <span>{entry.date}</span>
-                    </div>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-zinc-800">
-                      {entry.items.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-semibold text-zinc-900">版本迭代</h2>
+                <button
+                  onClick={() => setIsVersionHistoryOpen(!isVersionHistoryOpen)}
+                  className="text-sm text-zinc-500 hover:text-zinc-700 transition"
+                >
+                  {isVersionHistoryOpen ? '收起' : '展开'}
+                </button>
               </div>
+              <p className="text-xs text-zinc-500">最新改动记录。</p>
+              
+              {isVersionHistoryOpen && (
+                <div className="space-y-3 text-sm">
+                  {CHANGELOG.map((entry) => (
+                    <div
+                      key={entry.version}
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-xs"
+                    >
+                      <div className="flex items-center justify-between text-xs text-zinc-500">
+                        <span className="font-semibold text-zinc-800">{entry.version}</span>
+                        <span>{entry.date}</span>
+                      </div>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-zinc-800">
+                        {entry.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </aside>
         </div>
@@ -720,7 +911,12 @@ export default function Home() {
                         const response = await fetch('/api/collect', {  
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(uploadData),
+                          body: JSON.stringify({ 
+                            ...uploadData, 
+                            feishuTableUrl: feishuTableUrl.trim(),
+                            appToken: appToken.trim(),
+                            tableId: tableId.trim()
+                          }),
                         })
                         
                         const result = await response.json()
@@ -732,6 +928,7 @@ export default function Home() {
                           setPreviewData(null)
                           setEditableData(null)
                           setXhsUrl('')
+                          setFeishuTableUrl('')
                         } else {
                           setStatus({ type: 'error', message: result.error || '上传失败' })
                         }
