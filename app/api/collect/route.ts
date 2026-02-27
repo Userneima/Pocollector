@@ -145,14 +145,8 @@ export async function POST(request: Request) {
     let appToken: string | undefined
     let tableId: string | undefined
     
-    // First priority: use directly provided appToken and tableId
-    if (directAppToken && directTableId) {
-      console.log('使用直接提供的 appToken 和 tableId')
-      appToken = directAppToken
-      tableId = directTableId
-    } 
-    // Second priority: process URL
-    else if (feishuTableUrl) {
+    // First priority: process URL (user-provided link)
+    if (feishuTableUrl) {
       console.log('解析飞书表格URL:', feishuTableUrl)
       
       // 检查是否为 wiki 链接
@@ -167,8 +161,14 @@ export async function POST(request: Request) {
         tableId = parsed.tableId
         console.log('解析结果:', { appToken, tableId })
       } else {
-        console.warn('飞书表格URL解析失败，将使用环境变量配置')
+        console.warn('飞书表格URL解析失败，将使用直接提供的配置')
       }
+    }
+    // Second priority: use directly provided appToken and tableId
+    else if (directAppToken && directTableId) {
+      console.log('使用直接提供的 appToken 和 tableId')
+      appToken = directAppToken
+      tableId = directTableId
     }
 
     console.log('开始上传到飞书...')

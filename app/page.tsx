@@ -418,7 +418,7 @@ export default function Home() {
                   value={feishuTableUrl}
                   onChange={(e) => setFeishuTableUrl(e.target.value)}
                   disabled={isLoading}
-                  placeholder="https://my.feishu.cn/wiki/... 或 https://my.feishu.cn/base/... 或 https://bytedance.larkoffice.com/sheets/..."
+                  placeholder="https://my.feishu.cn/base/... 或 https://bytedance.larkoffice.com/sheets/..."
                   className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 
