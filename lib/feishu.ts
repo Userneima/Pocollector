@@ -37,6 +37,7 @@ type AddToFeishuBitableInput = {
   category: string
   productImage: string
   productType?: string
+  platform?: string
   images?: string[]
 }
 
@@ -55,6 +56,7 @@ const FEISHU_FIELD_ENTRY_DATE = '入档日期'
 const FEISHU_FIELD_PRODUCT_NAME = '产品名'
 const FEISHU_FIELD_CATEGORY = '种类'
 const FEISHU_FIELD_PRODUCT_IMAGE = '产品图'
+const FEISHU_FIELD_PLATFORM = '平台来源'
 
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 8000) {
   const controller = new AbortController()
@@ -269,9 +271,17 @@ export async function addToFeishuBitable(
   tableId?: string
 ) {
   const accessToken = token ?? (await getTenantAccessToken())
-  const envConfig = readBitableEnv()
-  const finalAppToken = appToken ?? envConfig.appToken
-  const finalTableId = tableId ?? envConfig.tableId
+  
+  // 优先使用传入的 appToken 和 tableId
+  let finalAppToken = appToken
+  let finalTableId = tableId
+  
+  // 只有在传入的值不存在时才尝试读取环境变量
+  if (!finalAppToken || !finalTableId) {
+    const envConfig = readBitableEnv()
+    finalAppToken = finalAppToken ?? envConfig.appToken
+    finalTableId = finalTableId ?? envConfig.tableId
+  }
   
   let productImageAttachments: FeishuAttachment[] = []
   
@@ -327,6 +337,13 @@ export async function addToFeishuBitable(
     fields[FEISHU_FIELD_PRODUCT_IMAGE] = productImageAttachments
   }
 
+  if (input.platform) {
+    fields[FEISHU_FIELD_PLATFORM] = input.platform
+  }
+
+  // 增加诊断日志：在发起飞书请求前，输出 AppToken 和 TableID
+  console.log('正在向多维表格写入数据 - AppToken:', finalAppToken, 'TableID:', finalTableId)
+
   let response: Response
   try {
     response = await fetchWithTimeout(buildBitableRecordUrl(finalAppToken, finalTableId), {
@@ -357,6 +374,9 @@ export async function addToFeishuBitable(
   const data = (await response.json()) as FeishuBitableRecordResponse
 
   if (data.code !== 0) {
+    if (data.code === 1254041) {
+      throw new Error('未找到数据表，请检查 Table ID (应以 tbl 开头) 是否与飞书地址栏一致')
+    }
     throw new Error(`飞书多维表格报错：${data.code} ${data.msg}`)
   }
 

@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "设计灵感采集器",
+  "version": "1.0",
+  "description": "采集 Pinterest、小红书、淘宝等网站的设计灵感",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://open.feishu.cn/*",
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "采集设计灵感",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon2.png",
+      "48": "icon2.png",
+      "128": "icon2.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["preview.html", "preview.js", "result.html", "result.js", "select-area.html", "select-area.js", "test-feishu.html", "test-feishu.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
