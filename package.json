@@ -1,13 +1,14 @@
 {
-  "name": "redbook",
+  "name": "pocollector",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:webpack": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "start:lite": "next start -p 3000",
-    "clean": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue; Remove-Item -Force .redbook-dev.log -ErrorAction SilentlyContinue\"",
+    "clean": "node -e \"const fs=require('fs');['.next'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}})\"",
     "lint": "eslint"
   },
   "dependencies": {

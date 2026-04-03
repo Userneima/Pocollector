@@ -19,6 +19,70 @@ document.addEventListener('DOMContentLoaded', function() {
     // 加载历史记录
     loadHistory();
 
+    const settingsPanel = document.getElementById('settingsPanel');
+    const settingsSaveHint = document.getElementById('settingsSaveHint');
+
+    document.getElementById('toggleSettingsBtn').addEventListener('click', function() {
+        settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+    });
+
+    chrome.storage.local.get(
+        [
+            'userDashScopeApiKey',
+            'userFeishuAppId',
+            'userFeishuAppSecret',
+        ],
+        function(r) {
+            if (r.userDashScopeApiKey) {
+                document.getElementById('dashScopeKeyInput').value = r.userDashScopeApiKey;
+            }
+            if (r.userFeishuAppId) {
+                document.getElementById('feishuAppIdInput').value = r.userFeishuAppId;
+            }
+            if (r.userFeishuAppSecret) {
+                document.getElementById('feishuAppSecretInput').value = r.userFeishuAppSecret;
+            }
+        }
+    );
+
+    document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+        const dash = document.getElementById('dashScopeKeyInput').value.trim();
+        const feiId = document.getElementById('feishuAppIdInput').value.trim();
+        const feiSec = document.getElementById('feishuAppSecretInput').value.trim();
+        const toSet = {};
+        if (dash) toSet.userDashScopeApiKey = dash;
+        if (feiId) toSet.userFeishuAppId = feiId;
+        if (feiSec) toSet.userFeishuAppSecret = feiSec;
+        const toRemove = ['userDashScopeBaseUrl'];
+        if (!dash) toRemove.push('userDashScopeApiKey');
+        if (!feiId) toRemove.push('userFeishuAppId');
+        if (!feiSec) toRemove.push('userFeishuAppSecret');
+
+        function showSaved(ok, msg) {
+            settingsSaveHint.textContent = msg;
+            settingsSaveHint.style.color = ok ? '#2e7d32' : '#c62828';
+            if (ok) setTimeout(function() { settingsSaveHint.textContent = ''; }, 3000);
+        }
+
+        chrome.storage.local.set(toSet, function() {
+            if (chrome.runtime.lastError) {
+                showSaved(false, '保存失败：' + chrome.runtime.lastError.message);
+                return;
+            }
+            if (toRemove.length) {
+                chrome.storage.local.remove(toRemove, function() {
+                    if (chrome.runtime.lastError) {
+                        showSaved(false, '清除旧项失败：' + chrome.runtime.lastError.message);
+                    } else {
+                        showSaved(true, '已保存');
+                    }
+                });
+            } else {
+                showSaved(true, '已保存');
+            }
+        });
+    });
+
     // 监听来自后台脚本的消息
     chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
         if (message.type === 'progress') {

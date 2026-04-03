@@ -3,15 +3,20 @@
 let currentData = null;
 let uploadedImages = [];
 
-// 监听来自后台脚本的消息
+// 从 storage 恢复待显示结果（background 在打开本页前写入，防止 runtime 消息竞态丢失）
+function tryLoadPendingResultFromStorage() {
+  chrome.storage.local.get('__pocollector_pending_result', function(result) {
+    const pending = result.__pocollector_pending_result;
+    if (!pending) return;
+    chrome.storage.local.remove('__pocollector_pending_result');
+    currentData = pending;
+    displayAnalysisResult(pending);
+  });
+}
+
+// 分析结果仅通过 storage 注入，避免 runtime 广播导致多页面重复刷新
 chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
-  console.log('收到消息:', message);
-  if (message.type === 'showAnalysisResult') {
-    currentData = message.data;
-    displayAnalysisResult(message.data);
-  } else if (message.type === 'loadHistoryItem') {
-    console.log('加载历史记录项:', message.item);
-    // 加载历史记录项
+  if (message.type === 'loadHistoryItem') {
     loadHistoryItem(message.item);
   }
 });
@@ -68,6 +73,8 @@ function showHistory() {
 
 // 初始化
 function init() {
+  tryLoadPendingResultFromStorage();
+
   // 添加文件上传事件监听
   document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
   
@@ -309,18 +316,55 @@ function saveFeishuTableUrl() {
   });
 }
 
-// 上传到飞书
+function showFeishuSuccessModal() {
+  const successModal = document.createElement('div');
+  successModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center;';
+  successModal.innerHTML = `
+    <div style="background-color: white; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 400px;">
+      <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
+      <h2 style="margin: 0 0 15px 0; color: #2e7d32;">上传成功</h2>
+      <p style="margin: 0 0 30px 0; color: #666;">设计灵感已成功上传到飞书表格！</p>
+      <button id="feishuSuccessOk" style="padding: 10px 30px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">确定</button>
+    </div>
+  `;
+  document.body.appendChild(successModal);
+  document.getElementById('feishuSuccessOk').addEventListener('click', function() {
+    successModal.remove();
+    window.close();
+  });
+  setTimeout(function() {
+    successModal.remove();
+    window.close();
+  }, 3000);
+}
+
+function showFeishuErrorModal(msg) {
+  const errorModal = document.createElement('div');
+  errorModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center;';
+  errorModal.innerHTML = `
+    <div style="background-color: white; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 400px;">
+      <div style="font-size: 48px; margin-bottom: 20px;">❌</div>
+      <h2 style="margin: 0 0 15px 0; color: #c62828;">上传失败</h2>
+      <p style="margin: 0 0 30px 0; color: #666;">${msg || '未知错误'}</p>
+      <button id="feishuErrorOk" style="padding: 10px 30px; background-color: #f44336; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">确定</button>
+    </div>
+  `;
+  document.body.appendChild(errorModal);
+  document.getElementById('feishuErrorOk').addEventListener('click', function() {
+    errorModal.remove();
+  });
+}
+
+// 上传到飞书（扩展后台直连飞书 OpenAPI，凭证在弹窗「API 设置」中）
 function uploadToFeishu() {
   if (!currentData) return;
-  
-  // 获取飞书表格链接
+
   const feishuTableUrl = document.getElementById('feishuTableUrl').value;
   if (!feishuTableUrl) {
     alert('请输入飞书表格链接');
     return;
   }
-  
-  // 获取修改后的值
+
   const updatedAnalysis = {
     title: document.getElementById('title').value,
     author: document.getElementById('author').value,
@@ -331,177 +375,83 @@ function uploadToFeishu() {
     link: document.getElementById('link').value,
     platform: document.getElementById('platform').value
   };
-  
-  // 包含上传的图片
-  const allImages = [currentData.productImage, ...uploadedImages].filter(Boolean);
-  
-  // 显示加载状态
-  const uploadBtn = document.getElementById('uploadBtn');
-  const originalText = uploadBtn.textContent;
-  uploadBtn.textContent = '上传中...';
-  uploadBtn.disabled = true;
-  
-  // 添加加载动画
-  uploadBtn.style.position = 'relative';
-  uploadBtn.innerHTML = '<span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px;"></span>上传中...';
-  
-  // 添加动画样式
-  const style = document.createElement('style');
-  style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
-  document.head.appendChild(style);
-  
-  // 发送到后台脚本
-  // 使用更可靠的消息发送方式，添加超时处理
-  const sendMessageWithTimeout = function() {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('上传超时，请稍后重试'));
-      }, 30000); // 30秒超时
 
-      chrome.runtime.sendMessage({
-        type: 'uploadToFeishu',
-        data: {
-          ...updatedAnalysis,
-          images: allImages,
-          productImage: currentData.productImage,
-          productImageUrl: currentData.productImageUrl
-        },
-        feishuTableUrl: feishuTableUrl
-      }, function(response) {
-        clearTimeout(timeout);
-        if (chrome.runtime.lastError) {
-          // 记录错误但不直接reject，因为上传可能已经成功
-          console.warn('消息传递提示（非功能异常）：', chrome.runtime.lastError.message);
-          // 尝试解析响应，如果响应存在则使用，否则创建一个成功响应
-          if (response) {
-            resolve(response);
-          } else {
-            // 假设上传成功，因为后台脚本可能已经完成了上传
-            resolve({ success: true, message: '上传成功' });
-          }
-        } else {
-          resolve(response);
-        }
-      });
-    });
+  const allImages = [currentData.productImage, ...uploadedImages].filter(Boolean);
+  const now = new Date().toISOString();
+  const author = updatedAnalysis.author || '待补充';
+  const title = updatedAnalysis.title || ('产品调研_' + Math.floor(Date.now() / 1000));
+  const productType = updatedAnalysis.productType || '未分类';
+
+  const uploadData = {
+    bloggerName: author,
+    productImageUrl: updatedAnalysis.link || currentData.productImageUrl,
+    entryDate: now,
+    productName: title,
+    category: productType,
+    productImage: currentData.productImage,
+    productType: productType,
+    platform: updatedAnalysis.platform || '未知',
+    mainColor: updatedAnalysis.mainColor || '未识别',
+    material: updatedAnalysis.material || '未识别',
+    timeCost: updatedAnalysis.timeCost || '未识别',
+    images: allImages
   };
 
-  // 发送消息并处理响应
-  sendMessageWithTimeout()
-    .then(function(response) {
-      // 恢复按钮状态
-      uploadBtn.innerHTML = originalText;
-      uploadBtn.disabled = false;
-      
-      // 调试信息
-      console.log('上传到飞书的响应:', response);
-      
-      // 提供更明显的反馈
+  const uploadBtn = document.getElementById('uploadBtn');
+  const originalText = uploadBtn.textContent;
+  uploadBtn.disabled = true;
+  uploadBtn.style.position = 'relative';
+  uploadBtn.innerHTML = '<span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px;"></span>上传中...';
+  if (!document.getElementById('pocollector-spin-style')) {
+    const style = document.createElement('style');
+    style.id = 'pocollector-spin-style';
+    style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+  }
+
+  function resetBtn() {
+    uploadBtn.innerHTML = originalText;
+    uploadBtn.disabled = false;
+  }
+
+  const timer = setTimeout(function() {
+    resetBtn();
+    showFeishuErrorModal('上传超时，请重试');
+  }, 120000);
+
+  chrome.runtime.sendMessage(
+    {
+      type: 'uploadToFeishu',
+      data: uploadData,
+      feishuTableUrl: feishuTableUrl,
+    },
+    function(response) {
+      clearTimeout(timer);
+      resetBtn();
+      if (chrome.runtime.lastError) {
+        showFeishuErrorModal(chrome.runtime.lastError.message);
+        return;
+      }
       if (response && response.success) {
-        // 创建成功弹窗
-        const successModal = document.createElement('div');
-        successModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center;';
-        successModal.innerHTML = `
-          <div style="background-color: white; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 400px;">
-            <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
-            <h2 style="margin: 0 0 15px 0; color: #2e7d32;">上传成功</h2>
-            <p style="margin: 0 0 30px 0; color: #666;">设计灵感已成功上传到飞书表格！</p>
-            <button id="successOkBtn" style="padding: 10px 30px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">确定</button>
-          </div>
-        `;
-        document.body.appendChild(successModal);
-        
-        // 点击确定按钮关闭弹窗并关闭页面
-        document.getElementById('successOkBtn').addEventListener('click', function() {
-          successModal.remove();
-          window.close();
+        chrome.storage.local.get('history', function(res) {
+          const history = res.history || [];
+          history.unshift({
+            id: Date.now(),
+            timestamp: now,
+            type: 'uploaded',
+            title: uploadData.productName,
+            platform: uploadData.platform,
+            imageUrl: uploadData.productImageUrl,
+          });
+          if (history.length > 50) history.pop();
+          chrome.storage.local.set({ history: history });
         });
-        
-        // 3秒后自动关闭
-        setTimeout(() => {
-          successModal.remove();
-          window.close();
-        }, 3000);
+        showFeishuSuccessModal();
       } else {
-        // 即使响应失败，也假设上传可能成功，因为后台脚本可能已经完成了上传
-        // 显示一个成功的弹窗
-        const successModal = document.createElement('div');
-        successModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center;';
-        successModal.innerHTML = `
-          <div style="background-color: white; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 400px;">
-            <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
-            <h2 style="margin: 0 0 15px 0; color: #2e7d32;">上传成功</h2>
-            <p style="margin: 0 0 30px 0; color: #666;">设计灵感已成功上传到飞书表格！</p>
-            <button id="successOkBtn" style="padding: 10px 30px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">确定</button>
-          </div>
-        `;
-        document.body.appendChild(successModal);
-        
-        // 点击确定按钮关闭弹窗并关闭页面
-        document.getElementById('successOkBtn').addEventListener('click', function() {
-          successModal.remove();
-          window.close();
-        });
-        
-        // 3秒后自动关闭
-        setTimeout(() => {
-          successModal.remove();
-          window.close();
-        }, 3000);
+        showFeishuErrorModal((response && response.error) || '上传失败');
       }
-    })
-    .catch(function(error) {
-      // 恢复按钮状态
-      uploadBtn.innerHTML = originalText;
-      uploadBtn.disabled = false;
-      
-      // 检查是否是消息端口关闭错误
-      if (error && error.message && error.message.includes('The message port closed')) {
-        // 这种情况下，上传可能实际上是成功的，因为后台脚本可能已经完成了上传
-        // 显示一个成功的弹窗
-        const successModal = document.createElement('div');
-        successModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center;';
-        successModal.innerHTML = `
-          <div style="background-color: white; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 400px;">
-            <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
-            <h2 style="margin: 0 0 15px 0; color: #2e7d32;">上传成功</h2>
-            <p style="margin: 0 0 30px 0; color: #666;">设计灵感已成功上传到飞书表格！</p>
-            <button id="successOkBtn" style="padding: 10px 30px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">确定</button>
-          </div>
-        `;
-        document.body.appendChild(successModal);
-        
-        // 点击确定按钮关闭弹窗并关闭页面
-        document.getElementById('successOkBtn').addEventListener('click', function() {
-          successModal.remove();
-          window.close();
-        });
-        
-        // 3秒后自动关闭
-        setTimeout(() => {
-          successModal.remove();
-          window.close();
-        }, 3000);
-      } else {
-        // 显示错误弹窗
-        const errorModal = document.createElement('div');
-        errorModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center;';
-        errorModal.innerHTML = `
-          <div style="background-color: white; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 400px;">
-            <div style="font-size: 48px; margin-bottom: 20px;">❌</div>
-            <h2 style="margin: 0 0 15px 0; color: #c62828;">上传失败</h2>
-            <p style="margin: 0 0 30px 0; color: #666;">上传到飞书失败：${error.message || '未知错误'}</p>
-            <button id="errorOkBtn" style="padding: 10px 30px; background-color: #f44336; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">确定</button>
-          </div>
-        `;
-        document.body.appendChild(errorModal);
-        
-        // 点击确定按钮关闭弹窗
-        document.getElementById('errorOkBtn').addEventListener('click', function() {
-          errorModal.remove();
-        });
-      }
-    });
+    }
+  );
 }
 
 // 保存按钮点击事件

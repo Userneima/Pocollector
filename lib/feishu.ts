@@ -29,7 +29,7 @@ type FeishuUploadResponse = {
   }
 }
 
-type AddToFeishuBitableInput = {
+export type AddToFeishuBitableInput = {
   bloggerName: string
   productImageUrl: string
   entryDate: string
@@ -39,6 +39,9 @@ type AddToFeishuBitableInput = {
   productType?: string
   platform?: string
   images?: string[]
+  mainColor?: string
+  material?: string
+  timeCost?: string
 }
 
 const FEISHU_AUTH_URL =
@@ -57,6 +60,9 @@ const FEISHU_FIELD_PRODUCT_NAME = '产品名'
 const FEISHU_FIELD_CATEGORY = '种类'
 const FEISHU_FIELD_PRODUCT_IMAGE = '产品图'
 const FEISHU_FIELD_PLATFORM = '平台来源'
+const FEISHU_FIELD_MAIN_COLOR = '主色调'
+const FEISHU_FIELD_MATERIAL = '核心材质'
+const FEISHU_FIELD_TIME_COST = '制作耗时'
 
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 8000) {
   const controller = new AbortController()
@@ -339,6 +345,18 @@ export async function addToFeishuBitable(
 
   if (input.platform) {
     fields[FEISHU_FIELD_PLATFORM] = input.platform
+  }
+
+  if (input.mainColor) {
+    fields[FEISHU_FIELD_MAIN_COLOR] = input.mainColor
+  }
+
+  if (input.material) {
+    fields[FEISHU_FIELD_MATERIAL] = input.material
+  }
+
+  if (input.timeCost) {
+    fields[FEISHU_FIELD_TIME_COST] = input.timeCost
   }
 
   // 增加诊断日志：在发起飞书请求前，输出 AppToken 和 TableID

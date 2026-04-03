@@ -11,16 +11,18 @@
     "storage"
   ],
   "host_permissions": [
-    "https://open.feishu.cn/*",
-    "<all_urls>"
+    "<all_urls>",
+    "https://dashscope.aliyuncs.com/*",
+    "https://*.aliyuncs.com/*",
+    "https://open.feishu.cn/*"
   ],
   "action": {
     "default_title": "采集设计灵感",
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icon2.png",
-      "48": "icon2.png",
-      "128": "icon2.png"
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
     }
   },
   "background": {
@@ -35,7 +37,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["preview.html", "preview.js", "result.html", "result.js", "select-area.html", "select-area.js", "test-feishu.html", "test-feishu.js"],
+      "resources": ["preview.html", "preview.js", "result.html", "result.js", "select-area.html", "select-area.js"],
       "matches": ["<all_urls>"]
     }
   ]

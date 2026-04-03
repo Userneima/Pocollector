@@ -39,10 +39,15 @@ document.getElementById('confirmBtn').addEventListener('click', function() {
   showLoading('正在分析图片...');
   
   // 向后台脚本发送确认消息
-  chrome.runtime.sendMessage({ 
-    type: 'confirmScreenshot',
-    screenshotUrl: currentScreenshotUrl 
-  });
+  chrome.runtime.sendMessage(
+    {
+      type: 'confirmScreenshot',
+      screenshotUrl: currentScreenshotUrl
+    },
+    function () {
+      void chrome.runtime.lastError;
+    }
+  );
   
   // 不再立即关闭标签页，等待分析完成
 });
@@ -50,7 +55,9 @@ document.getElementById('confirmBtn').addEventListener('click', function() {
 // 取消按钮点击事件
 document.getElementById('cancelBtn').addEventListener('click', function() {
   // 向后台脚本发送取消消息
-  chrome.runtime.sendMessage({ type: 'cancelScreenshot' });
+  chrome.runtime.sendMessage({ type: 'cancelScreenshot' }, function () {
+    void chrome.runtime.lastError;
+  });
   
   // 关闭当前标签页
   window.close();
